@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hunch}",
+            "name": "Debug hunch",
+            "target": "hunch",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug hunch"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hunch}",
+            "name": "Release hunch",
+            "target": "hunch",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release hunch"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hunch}",
+            "name": "Debug hunchd",
+            "target": "hunchd",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug hunchd"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:hunch}",
+            "name": "Release hunchd",
+            "target": "hunchd",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release hunchd"
+        }
+    ]
+}

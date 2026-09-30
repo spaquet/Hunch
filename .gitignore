@@ -9,3 +9,29 @@ xcuserdata/
 # v0 spike: private prompts from Claude Code history, labels, predictions
 spike/data/
 __pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Share launch configurations; keep other editor state local.
+.vscode/*
+!.vscode/launch.json
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+!.env.*.example
+.aws/
+.ssh/
+*.pem
+*.key
+*.p12
+
+# Dependencies, browser checks, and local runtime output
+node_modules/
+playwright-report/
+test-results/
+.coverage
+htmlcov/
+*.log
