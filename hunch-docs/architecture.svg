@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 532" role="img" aria-label="Agents ask Hunch; policy code, not the model, picks the route" font-size="13" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    svg { --edge: #8a8f98; --accent: #2f6fde; --ink: #1f2328; --quiet: #59636e; --tint: #f3f4f6; --bg: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      svg { --edge: #8b949e; --accent: #5b9bff; --ink: #e6edf3; --quiet: #9da7b3; --tint: #161b22; --bg: #0d1117; }
+    }
+    .bg { fill: var(--bg); }
+    .box { fill: none; stroke: var(--edge); stroke-width: 1.25; }
+    .later { stroke-dasharray: 4 4; }
+    .main { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-width: 2; }
+    .group { fill: var(--tint); stroke: var(--edge); stroke-width: 1.25; }
+    .ink { fill: var(--ink); }
+    .quiet { fill: var(--quiet); }
+    .b { font-weight: 600; }
+    .s { font-size: 11.5px; }
+    .c { text-anchor: middle; }
+    .wire { fill: none; stroke: var(--edge); stroke-width: 1.25; }
+    .head { fill: var(--edge); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path class="head" d="M0 0L10 5L0 10z"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="760" height="532"/>
+  <text class="ink b" x="24" y="34" font-size="15">Agents ask Hunch; policy code, not the model, picks the route</text>
+
+  <g class="wire" marker-end="url(#arrow)">
+    <path d="M104 116V148" marker-end="url(#arrow)"/>
+    <path d="M280 116V148" marker-end="url(#arrow)"/>
+    <path d="M456 116V148" marker-end="url(#arrow)"/>
+    <path d="M632 116V148" marker-end="url(#arrow)"/>
+    <path d="M104 204V228" marker-end="url(#arrow)"/>
+    <path d="M280 204V228" marker-end="url(#arrow)"/>
+    <path d="M456 204V228" marker-end="url(#arrow)"/>
+    <path d="M632 204V228" marker-end="url(#arrow)"/>
+    <path d="M256 296H272" marker-end="url(#arrow)"/>
+    <path d="M488 296H504" marker-end="url(#arrow)"/>
+    <path d="M148 324V372" marker-end="url(#arrow)"/>
+    <path d="M380 324V356H608V372" marker-end="url(#arrow)"/>
+  </g>
+
+  <rect class="box" x="24" y="60" width="512" height="56" rx="8"/>
+  <text class="ink b c" x="280" y="84">Coding agents</text>
+  <text class="quiet s c" x="280" y="100">Claude Code · Codex · OpenCode · Cursor</text>
+
+  <rect class="box" x="552" y="60" width="160" height="56" rx="8"/>
+  <text class="ink b c" x="632" y="84">You</text>
+  <text class="quiet s c" x="632" y="100">set rules, review log</text>
+
+  <rect class="box" x="24" y="148" width="160" height="56" rx="8"/>
+  <text class="ink b c" x="104" y="172">Agent hooks</text>
+  <text class="quiet s c" x="104" y="188">enforced gate</text>
+
+  <rect class="box" x="200" y="148" width="160" height="56" rx="8"/>
+  <text class="ink b c" x="280" y="172">hunch CLI</text>
+  <text class="quiet s c" x="280" y="188">skills, scripts, CI</text>
+
+  <rect class="box later" x="376" y="148" width="160" height="56" rx="8"/>
+  <text class="ink b c" x="456" y="172">MCP shim</text>
+  <text class="quiet s c" x="456" y="188">later, optional</text>
+
+  <rect class="box" x="552" y="148" width="160" height="56" rx="8"/>
+  <text class="ink b c" x="632" y="172">Menu-bar app</text>
+  <text class="quiet s c" x="632" y="188">backends, rules, log</text>
+
+  <rect class="group" x="24" y="228" width="712" height="112" rx="8"/>
+  <text class="ink b" x="40" y="252">hunchd — Swift daemon on a Unix socket</text>
+
+  <rect class="box" x="40" y="268" width="216" height="56" rx="8"/>
+  <text class="ink b c" x="148" y="292">Question registry</text>
+  <text class="quiet s c" x="148" y="308">choice · score · noul</text>
+
+  <rect class="main" x="272" y="268" width="216" height="56" rx="8"/>
+  <text class="ink b c" x="380" y="292">Policy engine</text>
+  <text class="ink s c" x="380" y="308">rules pick the route</text>
+
+  <rect class="box" x="504" y="268" width="216" height="56" rx="8"/>
+  <text class="ink b c" x="612" y="292">Decision log</text>
+  <text class="quiet s c" x="612" y="308">overrides become labels</text>
+
+  <text class="quiet s" x="156" y="362">typed questions</text>
+
+  <rect class="box" x="24" y="372" width="440" height="136" rx="8"/>
+  <text class="ink b" x="40" y="396">Model backends · on-device AFM 3 Core only</text>
+  <rect class="box" x="40" y="408" width="196" height="36" rx="8"/>
+  <text class="ink c" x="138" y="430">fm serve --socket</text>
+  <rect class="box" x="252" y="408" width="196" height="36" rx="8"/>
+  <text class="ink c" x="350" y="430">FoundationModels (v2)</text>
+  <text class="quiet s c" x="138" y="468">default</text>
+  <text class="quiet s c" x="350" y="468">in-process, for adapters</text>
+  <text class="quiet s" x="40" y="492">No PCC, no cloud model: inputs never leave the Mac</text>
+
+  <rect class="main" x="480" y="372" width="256" height="136" rx="8"/>
+  <text class="ink b" x="496" y="396">Route</text>
+  <text class="ink s" x="496" y="416">Answer locally (Apple model)</text>
+  <text class="ink s" x="496" y="434">Gather evidence, then ask again</text>
+  <text class="ink s" x="496" y="452">Frontier model at a chosen effort</text>
+  <text class="ink s" x="496" y="470">Ask a human to approve</text>
+  <text class="quiet s" x="496" y="488">Returned to the agent via its hook</text>
+</svg>
