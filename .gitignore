@@ -5,3 +5,7 @@
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# v0 spike: private prompts from Claude Code history, labels, predictions
+spike/data/
+__pycache__/
