@@ -15,6 +15,19 @@ const base = process.env.HUNCH_BASE_URL || 'http://localhost:8000';
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await page.locator('h1').count(), 1);
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    assert.equal(await page.locator('.orbit textPath').count(), 6);
+    const orbit = page.locator('.orbit-one svg');
+    const initialRotation = await orbit.evaluate(el => getComputedStyle(el).transform);
+    await page.waitForFunction(initial => getComputedStyle(document.querySelector('.orbit-one svg')).transform !== initial, initialRotation);
+    await page.locator('.orbit-toggle').click();
+    assert.equal(await page.locator('#pause-orbits').isChecked(), true);
+    for (const ring of await page.locator('.orbit svg').all()) {
+      assert.equal(await ring.evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
+    }
+    await page.locator('#pause-orbits').focus();
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('#pause-orbits').isChecked(), false);
+    assert.equal(await orbit.evaluate(el => getComputedStyle(el).animationPlayState), 'running');
     const metadata = await page.locator('script[type="application/ld+json"]').textContent();
     assert.equal(JSON.parse(metadata)['@graph'].length, 3);
     for (const selector of ['link[rel=canonical]', 'meta[property="og:image"]', 'meta[name="twitter:card"]', 'link[rel=describedby]', 'link[rel=alternate]']) {
@@ -50,6 +63,10 @@ const base = process.env.HUNCH_BASE_URL || 'http://localhost:8000';
     await page.emulateMedia({reducedMotion: 'reduce', colorScheme: 'dark'});
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     assert.equal(await page.locator('.terminal-cursor').evaluate(el => getComputedStyle(el).animationName), 'none');
+    for (const ring of await page.locator('.orbit svg').all()) {
+      assert.equal(await ring.evaluate(el => getComputedStyle(el).animationName), 'none');
+    }
+    assert.equal(await page.locator('.orbit-toggle').isVisible(), false);
     for (const path of ['index.md', 'llms.txt', 'llms-full.txt', 'sitemap.xml', 'robots.txt', 'assets/hunch-social.png', 'assets/favicon.svg']) {
       assert.equal((await context.request.get(`${base}/${path}`)).status(), 200, path);
     }
@@ -62,8 +79,10 @@ const base = process.env.HUNCH_BASE_URL || 'http://localhost:8000';
     assert.equal(await staticPage.locator('#theme-toggle').isVisible(), false);
     assert.equal(await staticPage.locator('noscript').isVisible(), true);
     assert.equal(await staticPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(19, 29, 24)');
+    await staticPage.locator('.orbit-toggle').click();
+    assert.equal(await staticPage.locator('.orbit-one svg').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
     await noJs.close();
-    console.log('Passed: desktop/mobile layout, theme persistence/system updates, routing, clipboard, keyboard, reduced motion, metadata, assets, and no-JS fallback.');
+    console.log('Passed: orbit animation/pause, desktop/mobile layout, themes, routing, clipboard, keyboard, reduced motion, metadata, assets, and no-JS fallback.');
   } finally {
     await browser.close();
   }

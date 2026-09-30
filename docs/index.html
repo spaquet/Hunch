@@ -88,13 +88,16 @@
       </div>
       <figure class="hero-figure" aria-label="Hunch's decision-gate logo between a task and its next action">
         <div class="figure-coordinate coordinate-top">FIG. 01 / THE LOCAL LAYER</div>
-        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div>
+        <input class="sr-only" type="checkbox" id="pause-orbits" aria-label="Pause orbit animation">
+        <div class="orbit orbit-one"><svg viewBox="0 0 1000 1000" aria-hidden="true"><defs><path id="orbit-intent" d="M500 0a500 500 0 1 1 0 1000a500 500 0 1 1 0-1000"/></defs><text><textPath href="#orbit-intent" startOffset="8%">INTENT · SCOPE · RISK ·</textPath></text><text><textPath href="#orbit-intent" startOffset="58%">MODEL LABELS · CODE DECIDES ·</textPath></text></svg></div>
+        <div class="orbit orbit-two"><svg viewBox="0 0 1000 1000" aria-hidden="true"><defs><path id="orbit-questions" d="M500 0a500 500 0 1 1 0 1000a500 500 0 1 1 0-1000"/></defs><text><textPath href="#orbit-questions" startOffset="18%">TYPED QUESTIONS ·</textPath></text><text><textPath href="#orbit-questions" startOffset="68%">LOCAL ANSWERS ·</textPath></text></svg></div>
+        <div class="orbit orbit-three"><svg viewBox="0 0 1000 1000" aria-hidden="true"><defs><path id="orbit-policy" d="M500 0a500 500 0 1 1 0 1000a500 500 0 1 1 0-1000"/></defs><text><textPath href="#orbit-policy" startOffset="5%">ON-DEVICE ·</textPath></text><text><textPath href="#orbit-policy" startOffset="55%">DETERMINISTIC POLICY ·</textPath></text></svg></div>
         <div class="figure-line line-in"></div><div class="figure-line line-out"></div>
         <div class="signal signal-in"><span class="signal-dot"></span><span>task in</span></div>
         <div class="instinct-core"><img src="assets/hunch-logo.svg" alt="" width="260" height="260"><span class="core-caption">INTUITION → POLICY</span></div>
         <div class="signal signal-out"><span>next move</span><span class="signal-arrow" aria-hidden="true">↗</span></div>
         <div class="local-label"><span class="status-dot"></span> This part stays on your Mac.</div>
-        <figcaption class="figure-coordinate coordinate-bottom"><span>SMALL MODEL. CLEAR BOUNDARIES.</span><span aria-hidden="true">[ H ]</span></figcaption>
+        <figcaption class="figure-coordinate coordinate-bottom"><span>SMALL MODEL. CLEAR BOUNDARIES.</span><label class="orbit-toggle" for="pause-orbits"><span class="motion-running">[ PAUSE ]</span><span class="motion-paused">[ RESUME ]</span></label></figcaption>
       </figure>
     </section>
     <div class="agent-strip wrap"><span class="mono">Designed for the agents you already use</span><div><span>Claude Code</span><span>Codex</span><span>OpenCode</span><span>Cursor</span></div><span class="strip-note">Integrations planned</span></div>
