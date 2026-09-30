@@ -1,0 +1,16 @@
+# Hunch
+
+> Hunch is a local System 1 layer for coding agents, powered by Apple's on-device Foundation Model. It asks typed questions about a task and is designed to let deterministic policy code choose the next action.
+
+Hunch is an early Swift prototype. Today the CLI classifies task risk as `readOnly`, `reversibleWrite`, `destructive`, or `sensitive`. It does not execute the task. The daemon, policy engine, generation commands, and Claude Code, Codex, OpenCode, and Cursor integrations are planned. The website's routing examples are illustrative, not live model calls.
+
+## Project
+
+- [Product overview and quick start](https://spaquet.github.io/Hunch/index.md): Agent-readable version of the website, with current capabilities, requirements, planned features, and usage.
+- [Full site context](https://spaquet.github.io/Hunch/llms-full.txt): Plain-text product context.
+- [Source repository](https://github.com/spaquet/Hunch): Swift sources, tests, license, and README.
+
+## Optional
+
+- [Design and roadmap](https://github.com/spaquet/Hunch/blob/main/hunch-docs/architecture.md): Detailed design notes; planned architecture is distinct from the current implementation.
+- [License](https://github.com/spaquet/Hunch/blob/main/LICENSE): Apache License 2.0.
