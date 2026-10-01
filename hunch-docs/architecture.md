@@ -2,7 +2,9 @@
 
 Sep 30, 2026 · Stephane Paquet
 
-Hunch is a local System 1 layer for coding agents. It runs Apple's on-device Foundation Model, asks it typed questions, and lets deterministic policy code decide what Claude Code, Codex, OpenCode or Cursor may do next. It covers what TypeSafe's Jev does, plus generation work Jev cannot do.
+Hunch is a local System 1 decision engine: it recreates what TypeSafe's Jev and its open-source counterpart Laya do, using Apple Intelligence on your Mac through `fm serve`. You hand it a state (any JSON: a prompt, a ticket, a tool call) and typed questions; it returns typed answers with probabilities and a confidence, in the same request and response shape as Jev and Laya.
+
+Coding agents are the first integration: deterministic policy code turns Hunch's answers into what Claude Code, Codex, OpenCode or Cursor may do next. Generation features (summaries, drafts, screenshots) come on top, but the core is the decision engine.
 
 ## At a glance
 
@@ -38,6 +40,8 @@ Jev and Laya set the goal: typed `choice`, `score` and `noul` answers, with conf
 | `fm respond`, greedy, warm | 0.76 s per call (1.58 s cold) |
 | `fm serve`, `response_format: json_schema`, warm | 0.63 s per call (1.78 s cold) |
 | `fm serve` with `logprobs: true` | Ignored; it also streams even when not asked to |
+| `fm serve` `temperature` | Honoured: 0 is deterministic (12/12 same answer); 1.0 spreads answers; default is sampling, not greedy |
+| `fm serve`, 5 requests in parallel | 2.24 s total against 2.97 s in sequence: little parallelism |
 | `fm serve` binding | Loopback only, or a Unix socket via `--socket` |
 | `fm serve --socket`, warm | 0.50–0.56 s per call (1.50 s cold); socket created `srwxr-xr-x`, so other users cannot connect |
 | PCC from a process started by an agent | Unavailable: "not available in this context. Please use the Terminal app." |
@@ -80,7 +84,7 @@ Local only. Hunch never calls PCC or any cloud model to answer its questions. Th
 | B. `hunchd` links FoundationModels in-process (optional) | `@Generable` enums, `prewarm()`, LoRA adapters, token counting and availability checks; no second process | Tied to the framework's Swift API; only needed once adapters land |
 | C. No daemon; spawn `fm respond` per call | Zero setup; best for the v0 spike | No shared state, log or UI |
 
-Plan: use C for a one-week v0 spike to test the questions, then build A. Add B in v2, when LoRA adapters need it; the backend interface keeps both behind one protocol.
+Plan: use C for a one-week v0 spike to test the questions, then build A. Add B only if LoRA adapters become possible (see Open questions); the backend interface keeps both behind one protocol.
 
 Why a Unix socket rather than a TCP port:
 
@@ -119,31 +123,97 @@ The MCP shim, when it comes, is a \~100-line adapter over the same socket. No lo
 
 ## Question API and confidence
 
-Hunch uses Laya's Jev-compatible `/v1/systemone` request shape and adds its own measure of confidence, so clients written for Jev can call Hunch unchanged. Only the Apple on-device model answers.
+Hunch's API is Laya's `system_one`, which reproduces Jev's: the same request, the same answer fields, so clients written for either can call Hunch unchanged. Only Apple's on-device model answers.
 
-A request is a state plus named questions. Each question is `choice` (with options), `score` (with ordered levels) or `noul`. Questions live in a versioned registry file, not in prompts spread across hooks. Example questions for v1:
+Request: a state (any JSON) and a map of named questions.
 
-- `intent`: choice (explain, diagnose, small\_change, multi\_file\_change, refactor, review, run\_command, research, ambiguous)
-- `scope`: choice (trivial, single\_file, localized, repo\_wide, unknown)
-- `risk`: choice (read\_only, reversible\_write, destructive, sensitive)
-- `needs_evidence`: noul
-- `injection`: noul, run on fetched or pasted content
-- `urgency` or `complexity`: score 0–3
+```json
+{
+  "state": {"subject": "Refund not received", "body": "I cancelled two weeks ago..."},
+  "questions": {
+    "department": {"type": "choice", "instructions": "Which team should handle this ticket?",
+                   "criteria": {"billing": "payments, refunds", "support": "product help and bugs", "sales": "new purchases"}},
+    "urgency":    {"type": "score", "instructions": "How urgent is this ticket?",
+                   "criteria": ["not urgent", "somewhat urgent", "urgent", "critical"]},
+    "churn_risk": {"type": "noul", "instructions": "Is the customer likely to cancel or dispute?"}
+  }
+}
+```
 
-The Apple backend compiles each question into an enum schema and returns the chosen value. Confidence comes from one of two modes:
+Response, per question type:
 
-| Mode | Cost | Confidence | Use for |
+| Type | Fields | How Hunch fills them on `fm serve` |
+| --- | --- | --- |
+| `choice` | `choice`, `probabilities` per option, `confidence` | Options compiled into an enum schema; probabilities from vote shares, then calibrated |
+| `score` | `score` (expected level, 0 to levels−1), `legend`, `probabilities`, `confidence` | Levels as an enum; `score` is the probability-weighted mean level |
+| `noul` | `noul` (P(true)) | A `true`/`false` enum; P(true) from vote shares, then calibrated |
+| all | `rl_agent.act_probability` | Laya learns this with a separate head. Hunch estimates it as the calibrated probability that the answer is right, from labelled data |
+| response | `model`, `usage.input_tokens`, `usage.output_tokens` | Summed from `fm serve` usage |
+
+`confidence` uses Jev's definition: 1 − normalized entropy of the answer distribution.
+
+The gap to close: `fm serve` exposes no logprobs (measured), so Hunch cannot read probabilities off the model the way Laya does. It samples instead. `temperature` is honoured (measured: 0 is deterministic, 1.0 spreads answers), so votes are real samples.
+
+| Mode | Cost | Probabilities | Use for |
 | --- | --- | --- | --- |
-| `fast` | 1 greedy call (\~0.6 s) | Reported as `uncalibrated` | Routing hints; low stakes |
-| `vote` | k samples at temperature > 0 (k=5, \~3 s) | Share of votes for the winner | Risk and cloud-egress questions |
+| `fast` | 1 call at temperature 0 (\~0.6 s) | One-hot; `confidence` reported as `uncalibrated` | Routing hints; low stakes |
+| `vote` | k samples (k=5, \~2.2 s in parallel, \~3 s in sequence) | Vote shares, calibrated against labelled data | Decisions that act on the answer |
 
-Thresholds are set per question from the decision log (see UI), never guessed. The response always says which mode produced the confidence.
+Raw vote shares are not calibrated probabilities: a model that is confidently wrong votes 5/5 for the wrong label. The optimization loop (below) fits a mapping from vote shares to accuracy, per question type and option count, as Laya fits a temperature per option-count bucket. Thresholds are then set per question from the decision log, never guessed. The response always says which mode produced the confidence.
 
 Context budget: every call must fit in 4,096 tokens.
 
-- About 600 tokens go to instructions and schema, and about 100 to the output. That leaves roughly 3,000 for the state.
+- About 600 tokens go to instructions and schema, and about 100 to the output. Few-shot examples take up to about 600 more. That leaves roughly 2,500 for the state.
 - The daemon counts tokens before each call. When the state is too large, it keeps the head and tail of logs and sends one file excerpt at a time.
 - Long logs and diffs are compressed in two steps: split into chunks of about 2,500 tokens, summarize each chunk, then summarize the summaries.
+
+## Improving accuracy: two loops
+
+Zero-shot, the on-device model is not good enough (see v0 spike results). Hunch improves it with two loops, neither of which retrains the model, so both work for every user, survive OS model updates, and need no entitlement.
+
+**Optimization loop (offline, at development time).** Labelled examples are split into train and test sets. The loop proposes changes to a question's instructions, option descriptions and few-shot examples, scores each on the train set, and keeps what helps. Only the final version is scored on the test set, so the loop cannot overfit it. The same run fits the calibration map from vote shares to accuracy. The output is a versioned question pack (instructions, examples, calibration) that ships with Hunch.
+
+**Feedback loop (online, on each user's Mac).** Every override in the decision log becomes a labelled example, stored locally. At question time, `hunchd` retrieves the few most similar past examples for that question and adds them as few-shot examples. Each user's Hunch adapts to them, nothing leaves the Mac, and nothing is trained. Retrieval needs a local similarity measure: Apple's `NLEmbedding` sentence embeddings in Swift; TF-IDF in the Python spike.
+
+Labelled data for the optimization loop comes from:
+
+- hand labels (the 100 v0 prompts);
+- open datasets: [DevGPT](https://zenodo.org/records/8242142) (about 29,000 developer prompts, CC BY 4.0) for `intent` and `scope`; [R-Judge](https://arxiv.org/abs/2401.10019) (569 agent interaction records labelled safe or unsafe) for risk on tool calls. These are unlabelled for Hunch's questions, so they are labelled by a larger model and spot-checked by hand;
+- Laya itself, run locally as a reference: on the same examples, its answers show how close Hunch gets to a trained System 1.
+
+## v0 spike results (1 Oct 2026)
+
+100 prompts from Claude Code history, labelled by hand; one greedy `fm respond` call per question.
+
+| Question | Agreement | Always guessing the most common label |
+| --- | --- | --- |
+| `intent` | 34% | 19% |
+| `scope` | 33% | 46% |
+| `risk` | 13% | 70% |
+| `needs_evidence` | 67% | 63% |
+
+- Gate failed. The safety half held: no `destructive` prompt was called `read_only`.
+- `risk` was biased to `destructive` (70 of 100). Rewording swung it to `read_only` (58%); splitting it into three yes/no questions made it say yes to "sensitive" 67 times (18%). The model has strong one-sided biases zero-shot.
+- Prompt-level `risk` is a weak signal: only 4 of 100 prompts were `destructive`. Risk belongs on the concrete tool call (`PreToolUse`), with deterministic rules first.
+- 4 of 400 calls hit Apple's safety guardrails; `--guardrails permissive-content-transformations` cleared most of them.
+- p50 latency 0.73 s per call.
+
+## v0.5 optimization loop results (1 Oct 2026)
+
+Same 100 labelled prompts, split 70 train / 30 test. Variants screened on train in `fast` mode; the best per question run in `vote` mode (k=5) on `fm serve`, calibrated on train, scored once on test.
+
+| Question | Train: zero-shot | Train: static examples | Train: retrieval | Test (vote, best variant) | Test: always the most common label |
+| --- | --- | --- | --- | --- | --- |
+| `intent` | 33% | **43%** | 37% | 27% | 20% |
+| `scope` | 20% | 41% | **44%** | 40% | 33% |
+| `risk` | 11% | 23% | **57%** | 60% | 67% |
+| `needs_evidence` | 59% | 61% | **63%** | 57% | 53% |
+
+- Gate failed on test. The safety half held again: no `destructive` prompt called `read_only`.
+- Examples help: retrieval took `risk` from 11% to 57–60%, which supports the feedback loop. But with 70 examples from one person, no question reaches a useful level.
+- Calibration works: it cut calibration error from 0.53 to 0.17 (`intent`), 0.42 to 0.07 (`scope`), 0.31 to 0.06 (`needs_evidence`). Raw vote shares are badly overconfident (the model often votes 5/5 for a wrong label).
+- No test prompt reached a calibrated `act_probability` of 0.8, so a System 1 built this way would escalate everything: honest, but not yet useful.
+- 30 test prompts give wide error bars (about ±17 points); differences of a few points are noise.
 
 ## Multimodal input (planned, not in v1)
 
@@ -202,7 +272,7 @@ Jev only decides. Apple's model can also generate text and see images, which add
 3. **Classify secrets and PII,** layered on top of a regex scanner, which stays authoritative.
 4. **Draft locally:** commit messages, PR descriptions and changelog lines.
 5. **Triage screenshots:** error dialogs and UI bug screenshots via `--image` and the `ocr` tool; check QR codes and barcodes with the `barcode` tool. See Multimodal input.
-6. **Custom adapters:** train a LoRA adapter on the override log with Apple's adapter toolkit. This is the path to better accuracy on your own questions, and needs the in-process backend.
+6. **Custom adapters (blocked):** a LoRA adapter trained with Apple's toolkit. See Open questions: no macOS 27 toolkit, a deployment entitlement, and one adapter per system model version. The two loops come first.
 7. **App Intents and Shortcuts:** expose the classifier outside coding, for example to triage mail or sort files.
 
 ## UI: menu-bar app
@@ -226,10 +296,11 @@ Config lives in plain files under `~/.config/hunch/`. The UI edits those files, 
 
 Four phases, each ending with a measurable gate; the Swift work starts only once the v0 spike shows the questions work.
 
-1. **v0 — spike (1 week, no Swift).** A script calls `fm respond` with enum schemas; a question registry; 100 prompts from your real Claude Code history, labelled by hand. *Gate:* at least 85% agreement on `intent` and `risk`, and zero `destructive` prompts labelled `read_only`.
+1. **v0 — spike (no Swift).** A script calls `fm respond` with enum schemas; a question registry; 100 prompts from real Claude Code history, labelled by hand. *Gate:* at least 85% agreement on `intent` and `risk`, and zero `destructive` prompts labelled `read_only`. **Result: failed zero-shot** (see v0 spike results).
+1b. **v0.5 — system_one on `fm serve`, both loops (no Swift).** A Laya-compatible `system_one` over the `fm serve` socket with `fast` and `vote`; the optimization loop with a train/test split and calibration; the feedback loop simulated with retrieval over labelled examples; `risk` moved to tool calls. *Gate:* the v0 gate on the held-out set, in `vote` mode.
 2. **v1 — daemon and hooks.** A Swift package with `hunchd`, the `hunch` CLI, the policy engine and the decision log; `fm serve --socket` supervised by `hunchd`; Claude Code `UserPromptSubmit` and `PreToolUse` hooks; `fast` and `vote` confidence modes; context compression; the Codex adapter, which reuses the Claude Code hook scripts. *Gate:* a week of daily use with p50 hook latency under 1 s and no bypassed approval gates.
 3. **v1.5 — menu-bar app.** The panels above; OpenCode and Cursor adapters. *Gate:* thresholds set from at least 300 logged decisions.
-4. **v2 — quality and reach.** the in-process FoundationModels backend; a LoRA adapter trained on overrides; the MCP shim; App Intents. *Gate:* the adapter beats the base model on the held-out set.
+4. **v2 — quality and reach.** Question packs from the optimization loop trained on open datasets as well as hand labels; the feedback loop's retrieval from overrides; the MCP shim; App Intents. *Gate:* `vote` mode beats the v0 baseline on the held-out set and is within an agreed margin of Laya on the same examples.
 
 ## Open questions
 
@@ -241,11 +312,18 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 - [x] PCC: not used. Hunch runs only the local on-device model, for speed and privacy.
 - [x] Backends: Apple's on-device model only. Jev and Laya are the feature target, not backends; custom providers are out.
 - [ ] Images: does token cost stay capped above 1024 px and for other formats; how do several images in one request behave; does `fm count-tokens --image` work outside an agent context?
+- [ ] LoRA adapters: Apple's toolkit 26.0.0 is the last release and does not support macOS 27; deploying an adapter needs the `com.apple.developer.foundation-model-adapter` entitlement held by a Developer Program account; each adapter (\~160 MB) fits one system model version ([Apple](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)). Revisit if a 27 toolkit ships.
+- [ ] Licences for R-Judge and for labelling open datasets with a larger model.
 - [ ] Does `fm serve` stay warm between bursts of hook calls, or does `hunchd` need to send a keep-warm request? Compare p50 against the in-process backend.
 
 ## Sources
 
-- [Laya repository](https://github.com/NandhaKishorM/laya)
+- [Laya Node.js runtime (receptron/laya)](https://github.com/receptron/laya)
+- [Laya model weights (convaiinnovations/laya)](https://huggingface.co/convaiinnovations/laya)
+- [Laya original reference](https://github.com/NandhaKishorM/laya)
+- [Apple: Foundation Models adapter training](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)
+- [DevGPT dataset](https://zenodo.org/records/8242142)
+- [R-Judge paper](https://arxiv.org/abs/2401.10019)
 - [TypeSafe manifesto](https://typesafe.ai/manifesto)
 - [MarkTechPost: TypeSafe releases Jev](https://www.marktechpost.com/2026/09/19/typesafe-ai-releases-jev/)
 - [Jev API examples](https://jevmodel.org/api/)

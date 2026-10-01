@@ -4,20 +4,21 @@
 Keys: a number picks an option, s skips the prompt, x excludes it from the
 eval (not a real task), q quits.
 """
-from common import DATA, append_jsonl, read_jsonl, registry
+from common import DATA, append_jsonl, options, read_jsonl, registry
 
 
-def ask(question):
-    options = list(question["options"])
-    print(f"\n  {question['name']}: {question['question']}")
-    for i, (name, desc) in enumerate(question["options"].items(), 1):
-        print(f"    {i}. {name:<18} {desc}")
+def ask(name, question):
+    labels = options(question)
+    choices = list(labels)
+    print(f"\n  {name}: {question['instructions']}")
+    for i, (label, desc) in enumerate(labels.items(), 1):
+        print(f"    {i}. {label:<18} {desc or ''}")
     while True:
         answer = input("  > ").strip().lower()
         if answer in ("s", "x", "q"):
             return answer
-        if answer.isdigit() and 1 <= int(answer) <= len(options):
-            return options[int(answer) - 1]
+        if answer.isdigit() and 1 <= int(answer) <= len(choices):
+            return choices[int(answer) - 1]
 
 
 def main():
@@ -32,8 +33,8 @@ def main():
         print(f"[{n}/{len(prompts)}] {prompt['project']}\n")
         print(prompt["text"])
         labels = {}
-        for question in reg["questions"]:
-            answer = ask(question)
+        for name, question in reg["questions"].items():
+            answer = ask(name, question)
             if answer == "q":
                 return
             if answer == "s":
@@ -41,7 +42,7 @@ def main():
             if answer == "x":
                 append_jsonl(DATA / "labels.jsonl", {"id": prompt["id"], "excluded": True})
                 break
-            labels[question["name"]] = answer
+            labels[name] = answer
         else:
             append_jsonl(DATA / "labels.jsonl", {"id": prompt["id"], "labels": labels})
 
