@@ -1,6 +1,6 @@
 # Hunch — agent instructions
 
-Hunch is a local System 1 decision engine: it recreates TypeSafe Jev and Laya (`system_one`: a JSON state plus typed `choice`, `score` and `noul` questions in; typed answers with probabilities and confidence out) using Apple Intelligence through `fm serve`. Keep the request and response shape compatible with Laya (https://github.com/receptron/laya). Coding agents are the first integration: deterministic policy code turns answers into what the agent may do next. The model labels; code decides. Generation features are secondary to the decision engine.
+Hunch is a local System 1 decision engine: it recreates TypeSafe Jev (`system_one`: a JSON state plus typed `choice`, `score` and `noul` questions in; typed answers with probabilities and confidence out), drawing on the open Laya and Fastino GLiNER2 / GLiNER2.5-Decide, using Apple Intelligence through `fm serve`. Jev's wire format (`POST /v1/systemone`) is the contract: code written against Jev must run against Hunch, and back, unchanged. Laya's `rl_agent` is an additive extension. The compatibility rules are in the design doc under "Question API: Jev's wire format". Coding agents are the first integration: deterministic policy code turns answers into what the agent may do next. The model labels; code decides. Generation features are secondary to the decision engine.
 
 ## Source of truth
 
@@ -10,9 +10,10 @@ Hunch is a local System 1 decision engine: it recreates TypeSafe Jev and Laya (`
 
 ## Fixed decisions
 
-- **Local only.** Hunch's own questions go only to Apple's on-device model. Never add PCC, cloud models, Jev or Laya as backends. Jev and Laya are the feature target, not dependencies.
+- **Local only.** Hunch's own questions go only to Apple's on-device model. Never add PCC, cloud models, Jev, Laya or GLiNER2 as backends. They are the feature target, not dependencies.
 - **Backend:** `hunchd` talks to `fm serve --socket` by default. Linking FoundationModels in-process is an optional backend, added only if LoRA adapters become possible.
 - **Sockets, not TCP ports.** Sockets live in a `0700` directory under `~/Library/Application Support/Hunch/`, never `/tmp`.
+- **Jev wire compatibility.** No Hunch-only request fields (choices go in `model`); extensions in responses are additive under fixed names; never reject a request Jev accepts.
 - **Context window:** 4,096 tokens, shared by instructions, prompt, schema and output.
 - **Never trust a model-reported confidence field.** Confidence comes from `fast` (uncalibrated) or `vote` modes; `vote` shares are calibrated against labelled data.
 - **No model retraining.** Accuracy comes from two loops: an offline optimization loop (instructions, few-shot, calibration; train/test split) and an online feedback loop (retrieval of the user's own overrides as few-shot). LoRA adapters are blocked (see the design doc).

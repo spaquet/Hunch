@@ -10,6 +10,8 @@ Hunch is a local System 1 layer for coding agents, powered by Apple's on-device 
 
 The model labels; code decides.
 
+Hunch takes its question format from TypeSafe's [Jev](https://typesafe.ai) and ideas from two open System 1 models, [Laya](https://github.com/receptron/laya) and Fastino's [GLiNER2](https://github.com/fastino-ai/GLiNER2). The goal is Jev's request and response shape, so code written for Jev can run against Hunch, and back, without changes. That API is designed, not yet built in Swift; see the [design doc](hunch-docs/architecture.md).
+
 ![Hunch: Fast intuition. Deterministic control. Local System 1 for coding agents.](output/imagegen/hunch-social.png)
 
 ## Status

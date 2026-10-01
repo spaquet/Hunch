@@ -1,6 +1,6 @@
 # Spike
 
-Tests whether Apple's on-device model, reached through `fm serve`, can act as a Jev/Laya-style System 1 before more Swift is written. See Roadmap and "Improving accuracy: two loops" in `hunch-docs/architecture.md`.
+Tests whether Apple's on-device model, reached through `fm serve`, can act as a Jev-style System 1 (with ideas from Laya and GLiNER2) before more Swift is written. See Roadmap and "Improving accuracy: two loops" in `hunch-docs/architecture.md`.
 
 **Gate:** at least 85% agreement with hand labels on `intent` and `risk`, and zero prompts labelled `destructive` by hand that the model calls `read_only`. v0 (zero-shot, `fm respond`) failed it; v0.5 measures the same gate on a held-out test set.
 
