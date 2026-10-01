@@ -13,7 +13,7 @@ Hunch is a local System 1 decision engine: it recreates TypeSafe Jev (`system_on
 - **Local only.** Hunch's own questions go only to Apple's on-device model. Never add PCC, cloud models, Jev, Laya, GLiNER2 or GLiNER2.5 as backends. They are the feature target, not dependencies.
 - **Backend:** `hunchd` talks to `fm serve --socket` by default. Linking FoundationModels in-process is an optional backend, added only if LoRA adapters become possible.
 - **Sockets, not TCP ports.** Sockets live in a `0700` directory under `~/Library/Application Support/Hunch/`, never `/tmp`.
-- **Jev wire compatibility.** No Hunch-only request fields (choices go in `model`); extensions in responses are additive under fixed names; never reject a request Jev accepts.
+- **Jev wire compatibility.** Messages in and out are Jev's JSON at `POST /v1/systemone`, over HTTP on a Unix socket (no TCP port, even opt-in). No Hunch-only request fields (choices go in `model`); extensions in responses are additive under fixed names; never reject a request Jev accepts.
 - **Context window:** 4,096 tokens, shared by instructions, prompt, schema and output.
 - **Never trust a model-reported confidence field.** Confidence comes from `fast` (uncalibrated) or `vote` modes; `vote` shares are calibrated against labelled data.
 - **No model retraining.** Accuracy comes from two loops: an offline optimization loop (instructions, few-shot, calibration; train/test split) and an online feedback loop (retrieval of the user's own overrides as few-shot). LoRA adapters are blocked (see the design doc).

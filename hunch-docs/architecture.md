@@ -149,7 +149,7 @@ The MCP shim, when it comes, is a \~100-line adapter over the same socket. No lo
 
 ## Question API: Jev's wire format
 
-Hunch's API is Jev's `POST /v1/systemone`, field for field; Laya's `system_one` is the same shape plus `rl_agent`. Code written against Jev must run against Hunch, and back, with only the base URL changed. Only Apple's on-device model answers.
+Hunch's API is Jev's `POST /v1/systemone`, field for field; Laya's `system_one` is the same shape plus `rl_agent`. Messages are Jev's, in and out: code written against Jev sends the same JSON to Hunch and reads the same JSON back. Only the transport differs: Hunch listens on a Unix socket, not HTTPS (see Transport). Only Apple's on-device model answers.
 
 Request: a model, a state (string, object, array or null) and a map of named questions.
 
@@ -187,6 +187,7 @@ Compatibility rules, so the two stay interchangeable:
 - **Extensions are additive** and live under fixed names Jev clients ignore: Laya's `rl_agent.act_probability`, and a `hunch` object per answer with the confidence `mode`, whether the answer is `calibrated`, and an `error` if any.
 - **Every answer is well-typed.** When Apple's guardrails refuse a question, the answer is still a valid answer of its type: uniform probabilities, `confidence` 0 (`noul` 0.5), and `hunch.error: "guardrail"`. A caller that thresholds on confidence escalates without special-casing Hunch.
 - **Auth:** an `Authorization` header is accepted and ignored; the socket's `0700` directory is the access control.
+- **Transport:** HTTP/1.1 over `hunchd`'s Unix socket, at `POST /v1/systemone`, with Jev's status codes and `Content-Type: application/json`. Any HTTP client that can reach a Unix socket (`curl --unix-socket`, Python `http.client` over `AF_UNIX`, SwiftNIO) speaks Jev's protocol to Hunch unchanged. There is no TCP port, not even an opt-in one, so TypeSafe's SDKs, which take an HTTPS base URL, do not connect directly; a caller switching between Jev and Hunch changes how it connects, never what it sends or reads.
 - **Same JSON on every surface:** the socket, `hunch system-one` (request on stdin, response on stdout) and, later, the MCP shim.
 
 The spike's `systemone.py` predates these rules: it takes the mode as a keyword argument, puts `mode` and `confidence_kind` at the top of each answer, and returns a bare `error` answer on refusal. v1 implements the rules above; the spike follows when it is next touched.
@@ -216,6 +217,21 @@ Every call must fit in 4,096 tokens.
 - About 600 tokens go to instructions and schema, and about 100 to the output. Few-shot examples take up to about 600 more. That leaves roughly 2,500 for the state.
 - The daemon counts tokens before each call. When the state is too large, it keeps the head and tail of logs and sends one file excerpt at a time.
 - Long logs and diffs are compressed in two steps: split into chunks of about 2,500 tokens, summarize each chunk, then summarize the summaries.
+
+## Latency: making `fm serve` fast enough
+
+GLiNER2.5-Decide answers in about 10 ms; `fm serve` takes about 0.55 s warm and 1.5 s cold. Hunch stays on Apple's model and closes the gap with the steps below, ordered by expected gain. Each is measured before it is adopted, with p50 and p95 per hook.
+
+Targets: `PreToolUse` p50 under 50 ms (most calls never reach the model), under 0.6 s when the model is asked; `UserPromptSubmit` under 0.8 s in `fast` mode; `vote` under 1.24 s, JevBench's speed gate (twice Jev's 0.62 s).
+
+1. **Do not call the model.** Deterministic allow and deny rules run first (see Integration). Then a decision cache: `fast` mode runs at temperature 0, which is deterministic (measured 12/12), so the same normalized state, question and question pack version give the same answer, and a cache hit is exact. Tool calls repeat (`git status`, `swift build`), so most `PreToolUse` calls should end here. Decisions that keep coming out the same are offered in the menu-bar app as new rules; a human accepts them, so the model trains the rule file, not itself.
+2. **One call per state, not per question.** Joint answering (above): four questions in one schema cost one call instead of four.
+3. **Stay warm.** A cold call costs about 1 s more. `hunchd` sends a one-token request when an agent session starts (Claude Code's `SessionStart` hook) and after a measured idle period, so hook calls never pay the cold start. First measure how long `fm serve` stays warm.
+4. **Fewer output tokens.** Decoding is token by token, and constrained decoding still decodes. The schema uses short codes instead of label names (`a`, `b`, `c`; `y` and `n` for `noul`) and `hunchd` maps them back, so callers still see Jev's labels. Test whether `fm serve` accepts a bare enum as the schema, which drops the JSON wrapper.
+5. **Fewer, stable input tokens.** Prompt processing grows with prompt length: keep instructions short and keep few-shot examples only where the optimization loop shows they help. Order every prompt static first (instructions, label descriptions, fixed examples), dynamic last (retrieved examples, then the state), so a prefix cache can hit. Measure whether `fm serve` reuses a repeated prefix; if it does not, FoundationModels' `prewarm(promptPrefix:)` and a reused session are reasons for the in-process backend (see Open questions).
+6. **Vote only when needed, and stop early.** `fast` first; `vote` only when policy needs a calibrated answer and no rule settled it. Then sample in sequence and stop when the answer is settled: two agreeing samples end the vote if calibration at k=2 clears the threshold, otherwise continue up to k=5. `fm serve` gains little from parallel requests (measured), so sampling in sequence costs little and usually stops at two or three.
+7. **Try Apple's content-tagging adapter.** `--use-case content-tagging` selects a built-in adapter tuned for tagging, with no entitlement. Test whether `fm serve` exposes it, and compare accuracy and latency per question.
+8. **Prioritize gates.** `fm serve` serves requests close to one at a time, so `hunchd` queues them: `PreToolUse` first, then `UserPromptSubmit`, then generation (summaries, drafts). A long summary must never delay a tool-call gate.
 
 ## Improving accuracy: two loops
 
@@ -358,7 +374,7 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 
 1. **v0 — spike (no Swift).** A script calls `fm respond` with enum schemas; a question registry; 100 prompts from real Claude Code history, labelled by hand. *Gate:* at least 85% agreement on `intent` and `risk`, and zero `destructive` prompts labelled `read_only`. **Result: failed zero-shot** (see v0 spike results).
 1b. **v0.5 — system_one on `fm serve`, both loops (no Swift).** A Laya-compatible `system_one` over the `fm serve` socket with `fast` and `vote`; the optimization loop with a train/test split and calibration; the feedback loop simulated with retrieval over labelled examples; `risk` moved to tool calls. *Gate:* the v0 gate on the held-out set, in `vote` mode.
-2. **v1 — daemon and hooks.** A Swift package with `hunchd`, the `hunch` CLI, a minimal menu-bar app that registers `hunchd` (see [distribution.md](distribution.md)), the policy engine and the decision log; `fm serve --socket` supervised by `hunchd`; Claude Code `UserPromptSubmit` and `PreToolUse` hooks; `fast` and `vote` confidence modes; context compression; the Codex adapter, which reuses the Claude Code hook scripts. *Gate:* a week of daily use with p50 hook latency under 1 s and no bypassed approval gates.
+2. **v1 — daemon and hooks.** A Swift package with `hunchd`, the `hunch` CLI, a minimal menu-bar app that registers `hunchd` (see [distribution.md](distribution.md)), the policy engine and the decision log; `fm serve --socket` supervised by `hunchd`; Claude Code `UserPromptSubmit` and `PreToolUse` hooks; `fast` and `vote` confidence modes; context compression; latency steps 1–4 and 8 (rules and decision cache, joint answering, keep-warm, short codes, a priority queue); the Codex adapter, which reuses the Claude Code hook scripts. *Gate:* a week of daily use with p50 hook latency under 1 s and no bypassed approval gates.
 3. **v1.5 — menu-bar app.** The panels above; OpenCode and Cursor adapters. *Gate:* thresholds set from at least 300 logged decisions.
 4. **v2 — quality and reach.** Question packs from the optimization loop trained on open datasets as well as hand labels; the feedback loop's retrieval from overrides; the MCP shim; App Intents. *Gate:* `vote` mode beats the v0 baseline on the held-out and sealed sets and is within an agreed margin of Laya and GLiNER2.5-Decide on the same examples; Hunch passes a Jev client's own test suite unchanged.
 
@@ -372,12 +388,14 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 - [x] PCC: not used. Hunch runs only the local on-device model, for speed and privacy.
 - [x] Backends: Apple's on-device model only. Jev, Laya, GLiNER2 and GLiNER2.5 are the feature target, not backends; custom providers are out.
 - [x] API: Jev's `POST /v1/systemone` wire format is the contract; Laya's `rl_agent` is an additive extension.
-- [ ] Transport for Jev SDKs: TypeSafe's SDKs take an HTTPS base URL, and not every HTTP client can reach a Unix socket. Is an opt-in loopback port acceptable for drop-in SDK use, or does Hunch ship a thin client that speaks the socket? The fixed decision today is sockets only.
-- [ ] GLiNER2.5-Decide on device: Core ML ports exist and answer in about 10 ms, 50× faster than `fm serve`, under Apache 2.0. It would break "Apple's on-device model only" and has a 512-token input. Revisit if `fm serve` latency blocks `PreToolUse`.
+- [x] Transport: Unix sockets only, no loopback port, even opt-in. Messages in and out are Jev's JSON (see Transport).
+- [x] From GLiNER2 and JevBench: joint answering, a sealed eval set, negation cases in every test set, constraints between answers as policy rules. Agreed 1 Oct 2026.
+- [x] GLiNER2.5-Decide as a backend: no. Core ML ports answer in about 10 ms under Apache 2.0, but it would break "Apple's on-device model only" and caps input at 512 tokens. Hunch works through the latency plan instead (see Latency).
+- [ ] In-process backend for speed: today it is added only for LoRA adapters. If `fm serve` does not reuse prompt prefixes, should `prewarm(promptPrefix:)` and session reuse justify it on latency alone? Decide on measurements.
 - [ ] Images: does token cost stay capped above 1024 px and for other formats; how do several images in one request behave; does `fm count-tokens --image` work outside an agent context?
 - [ ] LoRA adapters: Apple's toolkit 26.0.0 is the last release and does not support macOS 27; deploying an adapter needs the `com.apple.developer.foundation-model-adapter` entitlement held by a Developer Program account; each adapter (\~160 MB) fits one system model version ([Apple](https://developer.apple.com/apple-intelligence/foundation-models-adapter/)). Revisit if a 27 toolkit ships.
 - [ ] Licences for R-Judge and for labelling open datasets with a larger model.
-- [ ] Does `fm serve` stay warm between bursts of hook calls, or does `hunchd` need to send a keep-warm request? Compare p50 against the in-process backend.
+- [ ] How long does `fm serve` stay warm between bursts of hook calls? Sets the keep-warm interval (Latency, step 3).
 
 ## Sources
 
