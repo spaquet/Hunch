@@ -21,7 +21,8 @@ Hunch is a local System 1 decision engine: it recreates TypeSafe Jev and Laya (`
 
 - `Sources/HunchCore`: shared library (classifier, later policy engine and decision log).
 - `Sources/hunch`: CLI (swift-argument-parser).
-- `Sources/hunchd`: daemon (placeholder).
+- `Sources/hunchd`: daemon (stays resident under launchd; no socket server yet).
+- `Sources/HunchApp`: menu-bar app; registers `hunchd` with `SMAppService`. Bundle ids live in `HunchCore/Identity.swift` and `scripts/bundle.sh`; keep them in step.
 - `Tests/HunchCoreTests`: Swift Testing tests.
 - `spike/`: v0 spike in Python, standard library only. See `spike/README.md`.
 
@@ -31,6 +32,7 @@ Hunch is a local System 1 decision engine: it recreates TypeSafe Jev and Laya (`
 swift build
 swift test
 swift run hunch "task to classify"
+scripts/bundle.sh      # build and ad hoc sign .build/bundle/Hunch.app
 
 cd spike
 python3 sample.py      # sample prompts from ~/.claude/history.jsonl

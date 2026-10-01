@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "HunchCore", targets: ["HunchCore"]),
         .executable(name: "hunch", targets: ["hunch"]),
         .executable(name: "hunchd", targets: ["hunchd"]),
+        .executable(name: "HunchApp", targets: ["HunchApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
@@ -22,6 +23,7 @@ let package = Package(
             ]
         ),
         .executableTarget(name: "hunchd", dependencies: ["HunchCore"]),
+        .executableTarget(name: "HunchApp", dependencies: ["HunchCore"]),
         .testTarget(name: "HunchCoreTests", dependencies: ["HunchCore"]),
     ]
 )
