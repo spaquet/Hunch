@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · Stephane Paquet
 
-Hunch is a local System 1 decision engine: it recreates what TypeSafe's Jev does, drawing on two open counterparts, Laya and Fastino's GLiNER2 family (GLiNER2.5-Decide in particular), using Apple Intelligence on your Mac through `fm serve`. You hand it a state (any JSON: a prompt, a ticket, a tool call) and typed questions; it returns typed answers with probabilities and a confidence, in Jev's request and response shape, so code written against Jev runs against Hunch, and back, without changes (see Question API: Jev's wire format).
+Hunch is a local System 1 decision engine: it recreates what TypeSafe's Jev does, drawing on two open counterparts, Laya and Fastino's GLiNER2 and GLiNER2.5 (GLiNER2.5-Decide in particular), using Apple Intelligence on your Mac through `fm serve`. You hand it a state (any JSON: a prompt, a ticket, a tool call) and typed questions; it returns typed answers with probabilities and a confidence, in Jev's request and response shape, so code written against Jev runs against Hunch, and back, without changes (see Question API: Jev's wire format).
 
 Coding agents are the first integration: deterministic policy code turns Hunch's answers into what Claude Code, Codex, OpenCode or Cursor may do next. Generation features (summaries, drafts, screenshots) come on top, but the core is the decision engine.
 
@@ -12,7 +12,7 @@ Coding agents are the first integration: deterministic policy code turns Hunch's
 
 Agents reach `hunchd` through hooks (enforced) or the CLI (on request). The model only answers typed questions; the policy engine turns those answers into a route, and every decision is logged.
 
-## Jev, Laya, GLiNER2 and fm
+## Jev, Laya, GLiNER2 / GLiNER2.5 and fm
 
 Apple's model can match Jev's typed output, but not its calibrated probabilities; Hunch has to estimate confidence another way.
 
@@ -20,7 +20,7 @@ A System 1 model answers typed questions about a state in one pass: `choice` (pi
 
 |  | Jev (TypeSafe) | Laya (open source) | GLiNER2.5-Decide (Fastino, open source) | fm (Apple, on-device) |
 | --- | --- | --- | --- | --- |
-| Model | Proprietary, hosted | ModernBERT / mmBERT encoders, 322–421M params | DeBERTa-v3-large encoder with a label head, 340M params (GLiNER2 family: 74–340M) | AFM 3 Core, generative LLM |
+| Model | Proprietary, hosted | ModernBERT / mmBERT encoders, 322–421M params | DeBERTa-v3-large encoder with a label head, 340M params (see the GLiNER2 and GLiNER2.5 models below) | AFM 3 Core, generative LLM |
 | Output | Typed by architecture | Typed by architecture | Typed by architecture | Typed by constrained decoding |
 | Probabilities | Yes, calibrated | Yes, calibrated after temperature fit | Yes, per label; calibration method not published | No: no logprobs exposed |
 | Wire format | `POST /v1/systemone` (the reference) | `system_one`, Jev's shape plus `rl_agent` | Its own (`classify_text`, schema builder); third-party adapters serve Jev's shape | None; Hunch adds Jev's |
@@ -32,13 +32,29 @@ A System 1 model answers typed questions about a state in one pass: `choice` (pi
 
 On accuracy, the claim that GLiNER2.5-Decide beats Jev comes from Fastino's own suite (17 domains, 300 held-out examples each): 60.2% exact match against 57.6% for JevK5, an open 4B reproduction of Jev, not TypeSafe's model. On JevBench (independent; 1,624 decisions, half of the accuracy score from a sealed set), Jev scores 80.0, Laya 36.9 and GLiNER2.5 zero-shot classifiers 32.5–36.0; the best GLiNER2 entry fell from 56.7% on public items to 28.6% on sealed ones. Read it as: GLiNER2.5-Decide is the fastest open System 1 and strong on routing; Jev is still the accuracy reference.
 
+### GLiNER2 and GLiNER2.5
+
+Fastino's GLiNER2 is a family of schema-driven encoders (EMNLP 2025, Apache 2.0) that extract entities, classify text, fill JSON structures and find relations in one local model, behind one API (`AutoExtractor.from_pretrained`). GLiNER2.5 keeps that API but swaps the span grid for start/end boundary pairing, which handles spans of any length within the window and adds attributes on spans (for example, sentiment per person). GLiNER2.5-Decide is the GLiNER2.5-era checkpoint trained for typed decisions, the one that competes with Jev.
+
+| Generation | Model | Params | Base encoder | Use |
+| --- | --- | --- | --- | --- |
+| GLiNER2 (span) | `fastino/gliner2-base-v1` | 205M | DeBERTa-v3-base | English |
+| GLiNER2 (span) | `fastino/gliner2-large-v1` | 340M | DeBERTa-v3-large | English |
+| GLiNER2 (span) | `fastino/gliner2-multi-v1` | \~205M | mDeBERTa-v3-base | Multilingual |
+| GLiNER2.5 (boundary) | `fastino/gliner2.5-small-v1` | 74M | DeBERTa-v3-xsmall | Edge |
+| GLiNER2.5 (boundary) | `fastino/gliner2.5-base-v1` | 194M | DeBERTa-v3-base | English, recommended |
+| GLiNER2.5 (boundary) | `fastino/gliner2.5-multi-v1` | 287M | mDeBERTa-v3-base | Multilingual |
+| Decision | `fastino/GLiNER2.5-Decide` | 340M | DeBERTa-v3-large | Typed decisions: routing, yes/no gates, ordinal scores |
+
+All of them classify zero-shot from labels and descriptions given at call time, return a confidence per label, run on CPU, and accept LoRA adapters (2–10 MB). None speaks Jev's wire format natively. On JevBench v1.4 the general models rank far below Jev: GLiNER2 large 15.14, GLiNER2 11.78, GLiNER2.5 multi 9.76, GLiNER2.5 small 7.19.
+
 What Hunch takes from each:
 
 - **Jev:** the contract. Its wire format, question types, limits, error codes and its definition of `confidence`. Hunch must be a drop-in for Jev clients.
 - **Laya:** calibration per option-count bucket, and `rl_agent.act_probability` as an extra field Jev clients ignore.
-- **GLiNER2 / GLiNER2.5-Decide:** answering all questions about a state in one pass (see Joint answering); label descriptions as first-class input; constraints between answers (`implies`), which Hunch expresses as policy rules rather than request fields; and its known failure, negation ("Do not set a timer" scored `set_timer` at 94%), as a standing case in Hunch's evals.
+- **GLiNER2 / GLiNER2.5 (and GLiNER2.5-Decide):** answering all questions about a state in one pass (see Joint answering); label descriptions as first-class input; constraints between answers (`implies`), which Hunch expresses as policy rules rather than request fields; and its known failure, negation ("Do not set a timer" scored `set_timer` at 94%), as a standing case in Hunch's evals.
 
-Jev sets the goal: typed `choice`, `score` and `noul` answers, with confidence callers can act on, fast enough for every prompt. Hunch reaches that goal with Apple's on-device model alone, on your Mac, for speed and privacy: no prompt, state or image leaves the machine to be classified. Hunch does not call Jev, Laya or GLiNER2; it has to earn their confidence another way (see Question API: Jev's wire format).
+Jev sets the goal: typed `choice`, `score` and `noul` answers, with confidence callers can act on, fast enough for every prompt. Hunch reaches that goal with Apple's on-device model alone, on your Mac, for speed and privacy: no prompt, state or image leaves the machine to be classified. Hunch does not call Jev, Laya, GLiNER2 or GLiNER2.5; it has to earn their confidence another way (see Question API: Jev's wire format).
 
 ## Measured on macOS 27.2
 
@@ -186,7 +202,7 @@ The gap to close: `fm serve` exposes no logprobs (measured), so Hunch cannot rea
 
 Raw vote shares are not calibrated probabilities: a model that is confidently wrong votes 5/5 for the wrong label. The optimization loop (below) fits a mapping from vote shares to accuracy, per question type and option count, as Laya fits a temperature per option-count bucket. Thresholds are then set per question from the decision log, never guessed. The response always says which mode produced the confidence (`hunch.mode`).
 
-### Joint answering (from GLiNER2)
+### Joint answering (from GLiNER2 / GLiNER2.5)
 
 GLiNER2.5-Decide answers every question about a state in one forward pass. Hunch asks `fm serve` once per question, so four questions cost four calls. Two steps, measured before either is adopted:
 
@@ -215,7 +231,7 @@ Labelled data for the optimization loop comes from:
 - open datasets: [DevGPT](https://zenodo.org/records/8242142) (about 29,000 developer prompts, CC BY 4.0) for `intent` and `scope`; [R-Judge](https://arxiv.org/abs/2401.10019) (569 agent interaction records labelled safe or unsafe) for risk on tool calls. These are unlabelled for Hunch's questions, so they are labelled by a larger model and spot-checked by hand;
 - Laya and GLiNER2.5-Decide, run locally as references: on the same examples, their answers show how close Hunch gets to a trained System 1. They are yardsticks during development, never part of a shipped answer.
 
-Lessons from JevBench and GLiNER2:
+Lessons from JevBench and GLiNER2 / GLiNER2.5:
 
 - **A sealed set.** GLiNER2's best JevBench entry scored 56.7% on public items and 28.6% on sealed ones. Besides train and test, keep a sealed set that the loop never sees and that is scored only when a question pack is released, so repeated test runs cannot leak into the pack.
 - **Negation cases.** Every question pack's test and sealed sets include negated requests ("do not delete…", "don't push yet"), the case where GLiNER2.5-Decide fails.
@@ -354,7 +370,7 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 - [x] Name: the product is Hunch; package names can differ and are chosen later.
 - [x] Licence for fm serve: accepted; `fm serve` is the default backend.
 - [x] PCC: not used. Hunch runs only the local on-device model, for speed and privacy.
-- [x] Backends: Apple's on-device model only. Jev, Laya and GLiNER2 are the feature target, not backends; custom providers are out.
+- [x] Backends: Apple's on-device model only. Jev, Laya, GLiNER2 and GLiNER2.5 are the feature target, not backends; custom providers are out.
 - [x] API: Jev's `POST /v1/systemone` wire format is the contract; Laya's `rl_agent` is an additive extension.
 - [ ] Transport for Jev SDKs: TypeSafe's SDKs take an HTTPS base URL, and not every HTTP client can reach a Unix socket. Is an opt-in loopback port acceptable for drop-in SDK use, or does Hunch ship a thin client that speaks the socket? The fixed decision today is sockets only.
 - [ ] GLiNER2.5-Decide on device: Core ML ports exist and answer in about 10 ms, 50× faster than `fm serve`, under Apache 2.0. It would break "Apple's on-device model only" and has a 512-token input. Revisit if `fm serve` latency blocks `PreToolUse`.
@@ -368,7 +384,8 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 - [Laya Node.js runtime (receptron/laya)](https://github.com/receptron/laya)
 - [Laya model weights (convaiinnovations/laya)](https://huggingface.co/convaiinnovations/laya)
 - [Laya original reference](https://github.com/NandhaKishorM/laya)
-- [GLiNER2 (fastino-ai/GLiNER2)](https://github.com/fastino-ai/GLiNER2)
+- [GLiNER2 and GLiNER2.5 (fastino-ai/GLiNER2)](https://github.com/fastino-ai/GLiNER2)
+- [GLiNER2 paper, EMNLP 2025 System Demonstrations (Zaratiana et al.)](https://github.com/fastino-ai/GLiNER2#citation)
 - [GLiNER2.5-Decide model card](https://huggingface.co/fastino/GLiNER2.5-Decide)
 - [Soniqo: GLiNER2.5-Decide and Jev](https://soniqo.audio/blog/gliner-decide-vs-jev)
 - [JevBench leaderboard](https://benchmarkheaven.com/jev-models)
