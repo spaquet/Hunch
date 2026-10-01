@@ -290,6 +290,8 @@ A SwiftUI menu-bar app, built on the same core as `hunchd`, controls backends, p
 | Quality | Accuracy and calibration per question, from the labelled log |
 | Usage | Token counts, latency, estimated frontier spend avoided |
 
+The app ships in one Homebrew cask with `hunch` and `hunchd`; see [distribution.md](distribution.md).
+
 Config lives in plain files under `~/.config/hunch/`. The UI edits those files, so everything can also be version-controlled and edited by hand.
 
 ## Roadmap
@@ -298,7 +300,7 @@ Four phases, each ending with a measurable gate; the Swift work starts only once
 
 1. **v0 — spike (no Swift).** A script calls `fm respond` with enum schemas; a question registry; 100 prompts from real Claude Code history, labelled by hand. *Gate:* at least 85% agreement on `intent` and `risk`, and zero `destructive` prompts labelled `read_only`. **Result: failed zero-shot** (see v0 spike results).
 1b. **v0.5 — system_one on `fm serve`, both loops (no Swift).** A Laya-compatible `system_one` over the `fm serve` socket with `fast` and `vote`; the optimization loop with a train/test split and calibration; the feedback loop simulated with retrieval over labelled examples; `risk` moved to tool calls. *Gate:* the v0 gate on the held-out set, in `vote` mode.
-2. **v1 — daemon and hooks.** A Swift package with `hunchd`, the `hunch` CLI, the policy engine and the decision log; `fm serve --socket` supervised by `hunchd`; Claude Code `UserPromptSubmit` and `PreToolUse` hooks; `fast` and `vote` confidence modes; context compression; the Codex adapter, which reuses the Claude Code hook scripts. *Gate:* a week of daily use with p50 hook latency under 1 s and no bypassed approval gates.
+2. **v1 — daemon and hooks.** A Swift package with `hunchd`, the `hunch` CLI, a minimal menu-bar app that registers `hunchd` (see [distribution.md](distribution.md)), the policy engine and the decision log; `fm serve --socket` supervised by `hunchd`; Claude Code `UserPromptSubmit` and `PreToolUse` hooks; `fast` and `vote` confidence modes; context compression; the Codex adapter, which reuses the Claude Code hook scripts. *Gate:* a week of daily use with p50 hook latency under 1 s and no bypassed approval gates.
 3. **v1.5 — menu-bar app.** The panels above; OpenCode and Cursor adapters. *Gate:* thresholds set from at least 300 logged decisions.
 4. **v2 — quality and reach.** Question packs from the optimization loop trained on open datasets as well as hand labels; the feedback loop's retrieval from overrides; the MCP shim; App Intents. *Gate:* `vote` mode beats the v0 baseline on the held-out set and is within an agreed margin of Laya on the same examples.
 

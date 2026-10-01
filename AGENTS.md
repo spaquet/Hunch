@@ -5,6 +5,7 @@ Hunch is a local System 1 decision engine: it recreates TypeSafe Jev and Laya (`
 ## Source of truth
 
 - Design: `hunch-docs/architecture.md` and `hunch-docs/architecture.svg`. Read the design doc before changing behaviour, and update it in the same change when a decision changes.
+- Distribution (Homebrew cask, signing, release) and its status: `hunch-docs/distribution.md`.
 - `docs/` is the public GitHub Pages site; `hunch-docs/` is internal design notes.
 
 ## Fixed decisions
